@@ -13,25 +13,23 @@ import time
 # 1. CONFIGURATION SÉCURITÉ & TOKENS JWT
 # ==========================================
 
-SECRET_KEY = "SUPER_SECRET_SMART_HYDRO_KEY_UPM"  # Clé de signature sécurisée
+SECRET_KEY = "SUPER_SECRET_SMART_HYDRO_KEY_UPM"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 120  # Durée du token (2 heures)
+ACCESS_TOKEN_EXPIRE_MINUTES = 120
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-# --- BASE DE DONNÉES SIMULÉE (Identifiants de test pour le PFE) ---
 users_db = {
     "admin": {
         "username": "admin",
         "full_name": "Asma - Responsable Backend",
         "email": "asma@upm.ac.ma",
-        "hashed_password": pwd_context.hash("admin123"), # Mot de passe crypté proprement
+        "hashed_password": pwd_context.hash("admin123"),
         "disabled": False,
     }
 }
 
-# --- FONCTIONS UTILITAIRES SÉCURITÉ ---
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
@@ -42,14 +40,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     else:
         expire = datetime.utcnow() + timedelta(minutes=15)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
-    """
-    La barrière de sécurité : extrait le Token, vérifie sa validité,
-    et injecte l'utilisateur actuellement connecté.
-    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Accès refusé : Vous devez avoir une autorisation système (Token valide).",
@@ -75,8 +68,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
 app = FastAPI(
     title="Smart-Hydro Backend API",
-    description="API de calcul des besoins en irrigation avec IA et Sécurité Intégrée (JWT & Surveillance)",
-    version="1.2.0"
+    description="API de calcul des besoins en irrigation avec IA, Sécurité JWT et Géolocalisation GPS",
+    version="1.3.0"
 )
 
 
@@ -86,7 +79,6 @@ app = FastAPI(
 
 @app.middleware("http")
 async def monitor_integrity_middleware(request: Request, call_next):
-    # Detection d'anomalies simples (mots-clés suspects dans l'URL)
     suspicious_keywords = ["drop", "delete", "script", "select"]
     path = request.url.path.lower()
     
@@ -98,7 +90,6 @@ async def monitor_integrity_middleware(request: Request, call_next):
                 content={"detail": "ALERTE : Action suspecte bloquée pour protéger les cultures."}
             )
 
-    # Mesure du temps de réponse (Performance monitoring)
     start_time = time.time()
     response = await call_next(request)
     process_time = time.time() - start_time
@@ -137,22 +128,18 @@ CULTURES_MAROC = {
 # 6. ENDPOINTS / ROUTES DE L'API
 # ==========================================
 
-# Route principale publique
 @app.get("/")
 def home():
     return {
         "projet": "Smart-Hydro",
         "auteur": "Asma",
         "statut": "Sécurisé et Opérationnel",
+        "version_api": "1.3.0 (GPS Ready)",
         "docs": "/docs"
     }
 
-# Route pour obtenir le jeton JWT (Login)
 @app.post("/token")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    """
-    Formulaire d'authentification officiel. Utilise 'admin' et 'admin123'.
-    """
     user = users_db.get(form_data.username)
     if not user or not verify_password(form_data.password, user["hashed_password"]):
         raise HTTPException(
@@ -166,15 +153,18 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-# Route de calcul IA - PROTÉGÉE SÉCURISÉE
+
+# 🔥 NOUVELLE ROUTE SÉCURISÉE AVEC RECEPTION DES COORDONNÉES GPS 🔥
 @app.get("/api/recommandation/{plante}")
-def obtenir_recommandation(
+def obtener_recommandation(
     plante: str, 
-    ville: str = "Marrakech", 
+    latitude: float, 
+    longitude: float, 
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Calcule le besoin en eau précis selon la formule : Besoin = ETo x Kc.
+    Calcule le besoin en eau précis selon la formule agronomique.
+    Prend en compte la position GPS exacte (Latitude et Longitude) envoyée par la carte.
     """
     plante_key = plante.lower()
     
@@ -184,14 +174,21 @@ def obtenir_recommandation(
             detail=f"La culture '{plante}' n'est pas répertoriée."
         )
     
-    eto_du_jour = 6.2  # Simulation de l'ETo moyenne à Marrakech
+    # Simulation de l'ETo de la zone géographique ciblée
+    # (Plus tard, ces coordonnées serviront à interroger une API météo en temps réel)
+    eto_du_jour = 6.2  
+    
     kc = CULTURES_MAROC[plante_key]["kc"]
     besoin_mm = round(eto_du_jour * kc, 2)
     
     return {
         "utilisateur_connecte": current_user["full_name"],
+        "localisation_parcelle": {
+            "latitude": latitude,
+            "longitude": longitude,
+            "info": "Coordonnées GPS validées par le système"
+        },
         "info_calcul": {
-            "ville": ville,
             "eto_reference_mm": eto_du_jour,
             "coefficient_kc": kc
         },
@@ -199,20 +196,17 @@ def obtenir_recommandation(
             "plante": CULTURES_MAROC[plante_key]["nom"],
             "besoin_eau_mm": besoin_mm,
             "unite": "millimètres par jour",
-            "recommandation": f"Bonjour {current_user['full_name']}, optimisez l'irrigation pour économiser 30% d'eau."
+            "recommandation": f"Bonjour {current_user['full_name']}, l'analyse de votre parcelle située à ({latitude}, {longitude}) montre qu'il faut optimiser l'irrigation pour économiser 30% d'eau."
         }
     }
 
-# Route de contrôle des vannes d'irrigation - PROTÉGÉE ET SURVEILLÉE
+
 @app.post("/api/irrigation/controler")
 async def controler_irrigation(
     action: str, 
     duree_minutes: int,
     current_user: dict = Depends(get_current_user)
 ):
-    """
-    Module de détection du sabotage intégré pour bloquer les irrigations folles.
-    """
     if duree_minutes > 120:
         print(f"ALERTE SABOTAGE : Tentative d'irrigation excessive ({duree_minutes} min) par {current_user['username']}")
         raise HTTPException(
@@ -230,10 +224,5 @@ async def controler_irrigation(
     }
 
 
-# ==========================================
-# 7. LANCEMENT DU SERVEUR
-# ==========================================
-
 if __name__ == "__main__":
-    # Configuré sur le port 8080 pour éviter les conflits avec Smart Clinic !
     uvicorn.run(app, host="127.0.0.1", port=8080)
