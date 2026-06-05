@@ -28,8 +28,6 @@ import { strengthColor, strengthIndicator } from 'utils/password-strength';
 import EyeOutlined from '@ant-design/icons/EyeOutlined';
 import EyeInvisibleOutlined from '@ant-design/icons/EyeInvisibleOutlined';
 
-// ============================|| JWT - REGISTER ||============================ //
-
 export default function AuthRegister() {
   const [level, setLevel] = useState();
   const [showPassword, setShowPassword] = useState(false);
@@ -56,8 +54,7 @@ export default function AuthRegister() {
         initialValues={{
           firstname: '',
           lastname: '',
-          email: '',
-          company: '',
+          email: 'administrateur@email.com',
           password: '',
           submit: null
         }}
@@ -84,7 +81,7 @@ export default function AuthRegister() {
                     name="firstname"
                     onBlur={handleBlur}
                     onChange={handleChange}
-                    placeholder="Jean"
+                    placeholder="Prénom"
                     fullWidth
                     error={Boolean(touched.firstname && errors.firstname)}
                   />
@@ -107,7 +104,7 @@ export default function AuthRegister() {
                     name="lastname"
                     onBlur={handleBlur}
                     onChange={handleChange}
-                    placeholder="Dupont"
+                    placeholder="Nom"
                   />
                 </Stack>
                 {touched.lastname && errors.lastname && (
@@ -116,21 +113,7 @@ export default function AuthRegister() {
                   </FormHelperText>
                 )}
               </Grid>
-              <Grid size={12}>
-                <Stack sx={{ gap: 1 }}>
-                  <InputLabel htmlFor="company-signup">Entreprise</InputLabel>
-                  <OutlinedInput
-                    fullWidth
-                    error={Boolean(touched.company && errors.company)}
-                    id="company-signup"
-                    value={values.company}
-                    name="company"
-                    onBlur={handleBlur}
-                    onChange={handleChange}
-                    placeholder="Ex: Entreprise S.A"
-                  />
-                </Stack>
-              </Grid>
+              
               <Grid size={12}>
                 <Stack sx={{ gap: 1 }}>
                   <InputLabel htmlFor="email-signup">Adresse e-mail*</InputLabel>
@@ -143,7 +126,7 @@ export default function AuthRegister() {
                     name="email"
                     onBlur={handleBlur}
                     onChange={handleChange}
-                    placeholder="demo@entreprise.com"
+                    placeholder="administrateur@email.com"
                   />
                 </Stack>
                 {touched.email && errors.email && (
@@ -152,6 +135,7 @@ export default function AuthRegister() {
                   </FormHelperText>
                 )}
               </Grid>
+              
               <Grid size={12}>
                 <Stack sx={{ gap: 1 }}>
                   <InputLabel htmlFor="password-signup">Mot de passe</InputLabel>
