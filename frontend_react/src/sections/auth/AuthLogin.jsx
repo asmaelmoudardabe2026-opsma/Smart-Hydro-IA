@@ -28,10 +28,10 @@ export default function AuthLogin() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     try {
-      const response = await axios.post('http://127.0.0.1:8000/api/login', {
-        username: email,
-        password: password
-      });
+      const response = await axios.post('http://127.0.0.1:5000/token', {
+    email: email,
+    password: password
+});
 
       const token = response.data.access_token;
       localStorage.setItem('userToken', token);
