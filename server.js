@@ -8,14 +8,12 @@ const cors = require("cors");
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5000; // يعمل على المنفذ 5000
 const API_KEY = process.env.OPENWEATHER_API_KEY;
 
 // ===== MIDDLEWARE =====
 app.use(express.json());
-app.use(cors()); // مهم جداً للـ React
-
-const validateCity = require("./middleware/validateCity");
+app.use(cors()); // مهم جداً للسماح للـ React بالاتصال بالسيرفر
 
 // ===== GLOBAL CHECK =====
 if (!API_KEY) {
@@ -23,94 +21,65 @@ if (!API_KEY) {
   process.exit(1);
 }
 
-// ===== SIMPLE CACHE =====
-const cache = {};
-
 // ===== ROUTES =====
 
-// 🏠 Home route
+// 🏠 الصفحة الرئيسية للسيرفر
 app.get("/", (req, res) => {
   res.send("🌱 Smart Hydro Secure API is running successfully 🚀");
 });
 
-// 🌤️ Weather Route
-app.get("/weather/:city", validateCity, async (req, res) => {
+// 🌤️ مسار التوصيات المحدث لاستقبال إحداثيات الخريطة (lat & lng)
+app.get("/api/recommendation", async (req, res) => {
   try {
-    const city = req.params.city.toLowerCase();
+    const { lat, lng } = req.query;
 
-    // ===== CACHE CHECK =====
-    if (cache[city]) {
-      return res.json({
-        success: true,
-        source: "cache",
-        data: cache[city],
+    if (!lat || !lng) {
+      return res.status(400).json({
+        success: false,
+        message: "Les coordonnées lat et lng son obligatoires."
       });
     }
 
-    // ===== OPENWEATHER API =====
-    const url = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${API_KEY}&units=metric`;
+    // ===== استدعاء طقس الإحداثيات الحية من OPENWEATHER API =====
+    const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${API_KEY}&units=metric&lang=fr`;
 
     const response = await axios.get(url, { timeout: 5000 });
     const data = response.data;
 
-    // ===== EXTRACT DATA =====
+    // ===== استخراج البيانات الحية من النتيجة =====
     const temperature = data.main.temp;
     const humidity = data.main.humidity;
-    const windSpeed = data.wind.speed;
-    const windDirection = data.wind.deg;
-    const weatherCondition = data.weather[0].main;
+    const weatherCondition = data.weather[0].description; // وصف الطقس بالفرنسية
 
-    // ===== DEFAULT AI LOGIC =====
-    let recommendation = "";
-    let waterAmount = "";
+    // ===== خوارزمية الري الذكية الخاصة بالمشروع =====
+    let waterVolume = 40; // الافتراضي الاقتصادي
+    let advice = "";
 
-    // ===== SIMPLE IRRIGATION LOGIC =====
-    if (temperature > 30 && humidity < 40 && weatherCondition !== "Rain") {
-      recommendation = "Irrigation Recommended";
-      waterAmount = "High";
-    } else if (humidity >= 70 || weatherCondition === "Rain") {
-      recommendation = "Irrigation Not Recommended";
-      waterAmount = "Low";
+    if (temperature > 30 && humidity < 40) {
+      waterVolume = 55;
+      advice = `Alerte Température Élevée (${temperature}°C) et faible humidité (${humidity}%). Évapotranspiration intense. Augmentez le volume d'eau à 55 m³/hectare tôt le matin.`;
+    } else if (humidity >= 70 || data.weather[0].main === "Rain") {
+      waterVolume = 20;
+      advice = `Forte humidité (${humidity}%) ou risque de pluie. Irrigation minimale de 20 m³/hectare suffisante pour économiser l'eau.`;
     } else {
-      recommendation = "Moderate Irrigation Recommended";
-      waterAmount = "Medium";
+      waterVolume = 40;
+      advice = `Conditions optimales (${temperature}°C). Irrigation standard de 40 m³/hectare planifiée pour la fin de journée.`;
     }
 
-    // ===== CLEAN RESPONSE =====
-    const cleanData = {
-      city: data.name,
-      temperature,
-      humidity,
-      wind_speed: windSpeed,
-      wind_direction: windDirection,
-      weather_condition: weatherCondition,
-      recommendation,
-      estimated_water_need: waterAmount,
-    };
-
-    // ===== SAVE CACHE =====
-    cache[city] = cleanData;
-
+    // ===== إرسال النتيجة النظيفة المطابقة لواجهة الـ React =====
     return res.json({
-      success: true,
-      source: "api",
-      data: cleanData,
+      weather_status: weatherCondition.charAt(0).toUpperCase() + weatherCondition.slice(1),
+      temperature: temperature,
+      water_volume: waterVolume,
+      advice: advice
     });
 
   } catch (error) {
     console.error("Weather API Error:", error.message);
-
-    if (error.response) {
-      return res.status(error.response.status).json({
-        success: false,
-        message: error.response.data.message,
-      });
-    }
-
     return res.status(500).json({
       success: false,
-      message: "Server Error",
-      error: error.message,
+      message: "Erreur lors de la communication avec l'API OpenWeather.",
+      error: error.message
     });
   }
 });

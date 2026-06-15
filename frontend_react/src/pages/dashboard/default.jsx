@@ -20,6 +20,11 @@ export default function DashboardDefault() {
   const [farmName, setFarmName] = React.useState('');
   const [successMsg, setSuccessMsg] = React.useState('');
 
+  // الحالات الجديدة الخاصة بالتوصيات القادمة من الـ Backend
+  const [recommendation, setRecommendation] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [errorMsg, setErrorMsg] = React.useState('');
+
   React.useEffect(() => {
     const handleMapMessage = (event) => {
       if (event.data && event.data.source === 'leaflet-map') {
@@ -27,6 +32,8 @@ export default function DashboardDefault() {
         setLng(Number(event.data.lng).toFixed(6));
         setSource(event.data.type === 'click' ? 'Position sélectionnée par clic' : 'Position ajustée par marqueur');
         setSuccessMsg(''); // Efface le message précédent lors d'un nouveau clic
+        setRecommendation(null); // تهيئة التوصيات عند اختيار موقع جديد
+        setErrorMsg('');
       }
     };
 
@@ -34,13 +41,37 @@ export default function DashboardDefault() {
     return () => window.removeEventListener('message', handleMapMessage);
   }, []);
 
-  const handleSave = (e) => {
+  // دالة الحفظ المحدثة لإرسال الإحداثيات إلى الـ Backend وجلب التوصيات
+  const handleSave = async (e) => {
     e.preventDefault();
     if (!farmName.trim()) {
       alert("Veuillez saisir un nom pour la parcelle avant d'enregistrer.");
       return;
     }
-    setSuccessMsg(`Succès ! La parcelle "${farmName}" a été enregistrée aux coordonnées [${lat}, ${lng}].`);
+
+    setLoading(true);
+    setErrorMsg('');
+    setRecommendation(null);
+    setSuccessMsg('');
+
+    try {
+      // استدعاء سيرفر Node.js (server.js) الحقيقي على المنفذ 5000
+      const response = await fetch(`http://localhost:5000/api/recommendation?lat=${lat}&lng=${lng}`);
+      if (!response.ok) {
+        throw new Error("Impossible de récupérer les recommandations pour cet emplacement.");
+      }
+      
+      const data = await response.json();
+      
+      // تخزين البيانات القادمة من السيرفر بنجاح
+      setRecommendation(data);
+      setSuccessMsg(`Succès ! La parcelle "${farmName}" a été enregistrée aux coordonnées [${lat}, ${lng}].`);
+    } catch (error) {
+      console.error(error);
+      setErrorMsg(error.message || "Une erreur est survenue lors de la communication avec le backend.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const iframeSourceCode = `
@@ -85,7 +116,7 @@ export default function DashboardDefault() {
     <Grid container spacing={3}>
       <Grid item xs={12}>
         <Typography variant="h5" sx={{ fontWeight: 600, mb: 2 }}>
-          Configuration & Modification de la Localisation
+         Tableau de Bord de Gestion et Ravitaillement Hydrique — Marrakech
         </Typography>
       </Grid>
 
@@ -100,7 +131,7 @@ export default function DashboardDefault() {
       <Grid item xs={12}>
         <MainCard title="Interface d'Édition de Localisation - Région de Marrakech">
           <Grid container spacing={3}>
-            {/* Carte */}
+            {/* الخريطة تفاعلية */}
             <Grid item xs={12} md={7}>
               <iframe
                 title="Interactive Map Selection"
@@ -114,7 +145,7 @@ export default function DashboardDefault() {
               />
             </Grid>
 
-            {/* Formulaire de traitement */}
+            {/* نموذج إدخال البيانات والتحكم */}
             <Grid item xs={12} md={5}>
               <Box 
                 component="form" 
@@ -172,15 +203,94 @@ export default function DashboardDefault() {
                   color="primary" 
                   fullWidth 
                   size="large"
+                  disabled={loading}
                   sx={{ mt: 3, fontWeight: 'bold', py: 1 }}
                 >
-                  Enregistrer la nouvelle localisation
+                  {loading ? 'Chargement...' : 'Enregistrer la nouvelle localisation'}
                 </Button>
               </Box>
             </Grid>
           </Grid>
         </MainCard>
       </Grid>
+
+      {/* أقسام المعالجة والتحميل والأخطاء */}
+      {loading && (
+        <Grid item xs={12}>
+          <Alert severity="info" sx={{ borderRadius: '8px' }}>
+            Analyse des données météo en cours pour les coordonnées [{lat}, {lng}]...
+          </Alert>
+        </Grid>
+      )}
+
+      {errorMsg && (
+        <Grid item xs={12}>
+          <Alert severity="error" sx={{ borderRadius: '8px' }}>
+            {errorMsg}
+          </Alert>
+        </Grid>
+      )}
+
+      {/* 🌟 عرض المخرجات بنظام كارتين في الصف الأول وكارتين في الصف الثاني 🌟 */}
+      {recommendation && (
+        <Grid item xs={12}>
+          <MainCard title={`💡 Recommandations d'Irrigation Optimisées pour : ${farmName}`}>
+            <Grid container spacing={3}>
+              
+              {/* --- الصف الأول --- */}
+              {/* 1. كارت حالة الطقس - Condition Météo */}
+              <Grid item xs={12} md={6}>
+                <Box sx={{ p: 3, backgroundColor: '#e3f2fd', borderRadius: '8px', border: '1px solid #90caf9', height: '100%' }}>
+                  <Typography variant="subtitle1" fontWeight="bold" color="#0d47a1" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    ☁️ Condition Météo
+                  </Typography>
+                  <Typography variant="h5" sx={{ fontWeight: '700', color: '#1565c0' }}>
+                    {recommendation.weather_status || 'Non disponible'}
+                  </Typography>
+                </Box>
+              </Grid>
+
+              {/* 2. كارت درجة الحرارة - Température */}
+              <Grid item xs={12} md={6}>
+                <Box sx={{ p: 3, backgroundColor: '#fff3e0', borderRadius: '8px', border: '1px solid #ffcc80', height: '100%' }}>
+                  <Typography variant="subtitle1" fontWeight="bold" color="#e65100" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    🌡️ Température
+                  </Typography>
+                  <Typography variant="h5" sx={{ fontWeight: '700', color: '#ef6c00' }}>
+                    {recommendation.temperature !== undefined ? `${recommendation.temperature} °C` : '-- °C'}
+                  </Typography>
+                </Box>
+              </Grid>
+
+              {/* --- الصف الثاني --- */}
+              {/* 3. كارت الاحتياج المائي - Besoin en Eau */}
+              <Grid item xs={12} md={6}>
+                <Box sx={{ p: 3, backgroundColor: '#e8f5e9', borderRadius: '8px', border: '1px solid #a5d6a7', height: '100%' }}>
+                  <Typography variant="subtitle1" fontWeight="bold" color="#1b5e20" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    💧 Besoin en Eau
+                  </Typography>
+                  <Typography variant="h4" sx={{ fontWeight: '800', color: '#2e7d32' }}>
+                    {recommendation.water_volume || '0'} m³ / hectare
+                  </Typography>
+                </Box>
+              </Grid>
+
+              {/* 4. كارت التوصية والنصيحة الكاملة - Recommandation */}
+              <Grid item xs={12} md={6}>
+                <Box sx={{ p: 3, backgroundColor: '#f3e5f5', borderRadius: '8px', border: '1px solid #ce93d8', height: '100%' }}>
+                  <Typography variant="subtitle1" fontWeight="bold" color="#4a148c" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    📌 Recommandation
+                  </Typography>
+                  <Typography variant="body1" sx={{ color: '#4a148c', lineHeight: 1.5, fontWeight: '500' }}>
+                    {recommendation.advice || "Aucun conseil spécifique pour le moment."}
+                  </Typography>
+                </Box>
+              </Grid>
+
+            </Grid>
+          </MainCard>
+        </Grid>
+      )}
     </Grid>
   );
 }
